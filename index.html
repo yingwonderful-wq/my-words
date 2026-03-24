@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>星际单词指挥官</title>
+    <style>
+        :root { --main-cyan: #00d9ff; --bg-dark: #0a0e14; }
+        body { 
+            margin: 0; background: var(--bg-dark); color: white; 
+            font-family: 'Segoe UI', system-ui; display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow-x: hidden;
+        }
+
+        /* 游戏主体卡片 */
+        #game-box {
+            margin-top: 5vh; width: 90%; max-width: 500px; padding: 40px 20px;
+            background: rgba(255,255,255,0.03); border: 2px solid var(--main-cyan);
+            border-radius: 40px; text-align: center; backdrop-filter: blur(15px);
+            box-shadow: 0 0 40px rgba(0, 217, 255, 0.2);
+        }
+
+        #word-display { font-size: 80px; font-weight: 800; color: var(--main-cyan); margin: 0; cursor: pointer; }
+        #meaning-display { font-size: 24px; color: #888; margin-top: 10px; min-height: 30px; }
+        
+        #user-input {
+            width: 80%; margin-top: 40px; padding: 15px; font-size: 32px; border-radius: 20px;
+            border: none; text-align: center; background: #eee; outline: none; transition: 0.3s;
+        }
+
+        /* 管理面板 */
+        #admin-panel {
+            margin-top: 50px; width: 90%; max-width: 500px; padding: 20px;
+            border-top: 1px dashed #444; text-align: left;
+        }
+        h3 { color: var(--main-cyan); font-size: 16px; text-transform: uppercase; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .input-group input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
+        .btn-add { background: var(--main-cyan); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        .word-list { max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 10px; }
+        .word-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #333; font-size: 14px; }
+        .btn-del { color: #ff5555; cursor: pointer; font-weight: bold; }
+
+        /* 动画 */
+        .shake { animation: shake 0.4s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+        .success { color: #50fa7b !important; text-shadow: 0 0 20px #50fa7b; }
+    </style>
+</head>
+<body>
+
+    <div id="game-box">
+        <p id="word-display" onclick="speakCurrent()">---</p>
+        <p id="meaning-display">加载中...</p>
+        <input type="text" id="user-input" placeholder="输入单词..." autocomplete="off">
+        <div style="margin-top: 20px; font-size: 14px; color: #555;">点击单词可重复听发音</div>
+    </div>
+
+    <div id="admin-panel">
+        <h3>🚀 指挥中心 (添加新词)</h3>
+        <div class="input-group">
+            <input type="text" id="new-en" placeholder="英文: apple">
+            <input type="text" id="new-cn" placeholder="中文: 苹果">
+            <button class="btn-add" onclick="addNewWord()">添加</button>
+        </div>
+
+        <h3>📚 当前词库</h3>
+        <div class="word-list" id="word-list-ui"></div>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">* 数据保存在本地，清除浏览器缓存后会消失。</p>
+    </div>
+
+    <script>
+        // 初始默认词库
+        let words = JSON.parse(localStorage.getItem('myWordBank')) || [
+            { en: 'star', cn: '星星' },
+            { en: 'moon', cn: '月亮' },
+            { en: 'earth', cn: '地球' }
+        ];
+
+        let currentIndex = 0;
+        const wordDisp = document.getElementById('word-display');
+        const meanDisp = document.getElementById('meaning-display');
+        const userInput = document.getElementById('user-input');
+
+        function init() {
+            renderList();
+            loadRound();
+            userInput.addEventListener('input', handleInput);
+        }
+
+        function loadRound() {
+            if (words.length === 0) {
+                wordDisp.innerText = "Empty";
+                meanDisp.innerText = "词库是空的";
+                return;
+            }
+            if (currentIndex >= words.length) currentIndex = 0;
+            
+            wordDisp.innerText = words[currentIndex].en;
+            wordDisp.classList.remove('success');
+            meanDisp.innerText = words[currentIndex].cn;
+            userInput.value = '';
+            speakCurrent();
+        }
+
+        function handleInput() {
+            const val = userInput.value.toLowerCase().trim();
+            const target = words[currentIndex].en.toLowerCase();
+
+            if (val === target) {
+                wordDisp.classList.add('success');
+                speakCurrent();
+                setTimeout(() => {
+                    currentIndex++;
+                    loadRound();
+                }, 800);
+            } else if (val.length >= target.length && val !== target) {
+                userInput.classList.add('shake');
+                setTimeout(() => userInput.classList.remove('shake'), 400);
+            }
+        }
+
+        function speakCurrent() {
+            if (!words[currentIndex]) return;
+            const utter = new SpeechSynthesisUtterance(words[currentIndex].en);
+            utter.lang = 'en-US';
+            utter.rate = 0.8;
+            window.speechSynthesis.speak(utter);
+        }
+
+        // 管理功能
+        function addNewWord() {
+            const en = document.getElementById('new-en').value.trim();
+            const cn = document.getElementById('new-cn').value.trim();
+            if (!en || !cn) return alert("请输入完整内容");
+            
+            words.push({ en, cn });
+            saveAndRefresh();
+            document.getElementById('new-en').value = '';
+            document.getElementById('new-cn').value = '';
+        }
+
+        function deleteWord(index) {
+            words.splice(index, 1);
+            saveAndRefresh();
+        }
+
+        function saveAndRefresh() {
+            localStorage.setItem('myWordBank', JSON.stringify(words));
+            renderList();
+            if (currentIndex >= words.length) currentIndex = 0;
+            loadRound();
+        }
+
+        function renderList() {
+            const container = document.getElementById('word-list-ui');
+            container.innerHTML = words.map((w, i) => `
+                <div class="word-item">
+                    <span><b>${w.en}</b> - ${w.cn}</span>
+                    <span class="btn-del" onclick="deleteWord(${i})">删除</span>
+                </div>
+            `).join('');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
